@@ -2,15 +2,10 @@
 
 // Schéma de validation pour l'endpoint /index
 const indexationSchema = yup.object({
-  wordpressId: yup
-    .number()
-    .typeError('wordpressId doit être un nombre')
-    .required('wordpressId est obligatoire'),
-
-  type: yup
+  postId: yup
     .string()
-    .oneOf(['post', 'page'], 'type doit être "post" ou "page"')
-    .required('type est obligatoire'),
+    .trim()
+    .required('postId est obligatoire'),
 
   title: yup
     .string()
@@ -28,7 +23,9 @@ const indexationSchema = yup.object({
     .string()
     .trim()
     .url('url doit être valide')
-    .required('url est obligatoire')
+    .required('url est obligatoire'),
+
+  language: yup.string().trim().optional()
 })
 
 module.exports = indexationSchema

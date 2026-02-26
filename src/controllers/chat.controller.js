@@ -1,5 +1,6 @@
-Ôªøconst llmService = require('../services/llm.service')
+const { performance } = require('node:perf_hooks')
 const chatSchema = require('../schemas/chat.schema')
+const { answerWithRag } = require('../services/rag.service')
 const Conversation = require('../models/Conversation.model')
 
 // Endpoint permettant de recevoir une question utilisateur
@@ -7,26 +8,28 @@ exports.chat = async (request, reply) => {
   await chatSchema.validate(request.body, { abortEarly: false })
 
   const { question } = request.body
-  request.log.info({ question }, 'Question re√ßue')
+  request.log.info({ question }, 'Question reÁue')
 
-  const { answer, durationMs } = await llmService.generateResponse(question, request.log)
-  request.log.info({ durationMs }, 'R√©ponse g√©n√©r√©e avec succ√®s')
+  const start = performance.now()
+  const { answer, sources } = await answerWithRag(question, { logger: request.log })
+  const durationMs = Math.round(performance.now() - start)
+  request.log.info({ durationMs }, 'RÈponse gÈnÈrÈe avec succËs')
+
+  const bestPostId = Array.isArray(sources) && sources.length > 0 ? sources[0].postId || null : null
 
   try {
-    const conversation = await Conversation.create({
+    await Conversation.create({
       question,
       answer,
-      userId: request.user?.id || null,
-      responseTime: durationMs
+      postId: bestPostId
     })
-    request.log.info({ conversationId: conversation.id }, 'Conversation sauvegard√©e')
   } catch (error) {
-    request.log.error({ err: error }, '√âchec de sauvegarde conversation')
-    throw error
+    request.log.error({ err: error }, '…chec de sauvegarde conversation')
   }
 
   return reply.send({
     success: true,
-    answer
+    answer,
+    sources
   })
 }

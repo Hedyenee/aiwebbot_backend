@@ -8,6 +8,8 @@ const rateLimitPlugin = require('./plugins/rateLimit')
 const authRoutes = require('./routes/auth.routes')
 const chatRoutes = require('./routes/chat.routes')
 const indexationRoutes = require('./routes/indexation.routes')
+const analyticsRoutes = require('./routes/analytics.route')
+const wordpressRoutes = require('./routes/wordpress.route')
 const errorHandler = require('./middlewares/error.middleware')
 
 function buildApp() {
@@ -27,6 +29,8 @@ function buildApp() {
   app.register(authRoutes)
   app.register(indexationRoutes)
   app.register(chatRoutes)
+  app.register(analyticsRoutes)
+  app.register(wordpressRoutes)
 
   app.get('/', async (request, reply) => {
     return { message: 'AIWebBot Backend is running' }

@@ -1,185 +1,236 @@
-﻿# AIWebBot Backend
+﻿# AIWebBot Backend � Chatbot Intelligent bas� sur RAG
 
-## Overview
-Production-ready Fastify backend providing JWT-secured APIs, local LLM integration (Ollama Mistral 7B), and MongoDB persistence for conversations and indexed content. Built with modular, testable components (routes/controllers/services/models) and strict validation/logging.
+## Description du projet
+AIWebBot Backend est une plateforme serveur Node.js/Fastify con�ue pour fournir un chatbot intelligent int�gr� � WordPress. Ce projet s�inscrit dans le cadre d�un Projet de Fin d��tudes (PFE) d�ing�nierie, avec pour objectif d�explorer une cha�ne compl�te de Retrieval-Augmented Generation (RAG) en environnement de production.  
+Le backend re�oit des contenus WordPress, les vectorise et alimente un pipeline RAG afin de g�n�rer des r�ponses fiables et contextualis�es. L�inf�rence est r�alis�e via un LLM local (Ollama, mod�le Mistral) pour garantir la souverainet� des donn�es, r�duire les co�ts de latence r�seau et ma�triser la confidentialit�. 
 
-## Architecture
+## Architecture globale
+L�architecture est modulable et d�coupl�e : chaque couche (ingestion, indexation, recherche vectorielle, g�n�ration) est isol�e derri�re des services explicites. Les �changes suivent le flux WordPress ? Backend ? Base vectorielle (MongoDB) ? LLM ? R�ponse.
+
 ```
-Client
-  │
-  ▼
-Fastify (routes / preHandlers)
-  ├─ JWT plugin (authenticate)
-  ├─ Rate limit plugin
-  ├─ Error handler + Pino logger
-  ▼
-Controllers
-  ├─ auth.controller
-  ├─ indexation.controller
-  └─ chat.controller
-  ▼
-Services
-  ├─ llm.service (Ollama)
-  └─ domain services
-  ▼
-Models (Mongoose)
-  ├─ Document
-  └─ Conversation
-  ▼
-MongoDB          Ollama (Mistral 7B)
-```
-
-## Tech Stack
-- Node.js, Fastify
-- MongoDB + Mongoose
-- JWT (`@fastify/jwt`)
-- Yup for request validation
-- Pino (Fastify logger)
-- Ollama (local LLM, Mistral 7B)
-- Modular architecture (routes/controllers/services/models)
-
-## Project Structure
-```
-.
-├─ server.js
-└─ src
-   ├─ app.js
-   ├─ config/
-   ├─ controllers/
-   │  ├─ auth.controller.js
-   │  ├─ chat.controller.js
-   │  └─ indexation.controller.js
-   ├─ middlewares/
-   │  ├─ auth.middleware.js
-   │  └─ error.middleware.js
-   ├─ models/
-   │  ├─ Conversation.model.js
-   │  └─ Document.model.js
-   ├─ plugins/
-   │  ├─ db.js
-   │  ├─ jwt.js
-   │  └─ rateLimit.js
-   ├─ routes/
-   │  ├─ auth.routes.js
-   │  ├─ chat.routes.js
-   │  └─ indexation.routes.js
-   ├─ schemas/
-   │  ├─ chat.schema.js
-   │  └─ indexation.schema.js
-   ├─ services/
-   │  └─ llm.service.js
-   └─ utils/ …
+          +------------------+
+          |   WordPress      |
+          | (Webhook / API)  |
+          +--------+---------+
+                   |
+                   v
+          +--------+---------+
+          |   Fastify API    |
+          |  - /wordpress    |
+          |  - /chat         |
+          |  - /analytics    |
+          +--------+---------+
+                   |
+          +--------+---------+
+          |  Services RAG    |
+          |  - Chunking      |
+          |  - Embeddings    |
+          |  - Similarit�    |
+          +--------+---------+
+                   |
+                   v
+          +------------------+
+          | MongoDB (vectors)|
+          +--------+---------+
+                   |
+                   v
+          +------------------+
+          |    Ollama LLM    |
+          |   (Mistral)      |
+          +------------------+
+                   |
+                   v
+          +------------------+
+          |   R�ponse JSON   |
+          +------------------+
 ```
 
-## Features
-- JWT authentication for protected endpoints
-- Yup validation with structured 400 responses
-- Centralized error handling with Pino request-scoped logging
-- Conversation persistence (question/answer/response time)
-- Local LLM generation via Ollama (Mistral 7B)
-- Rate limiting protection
-- Clean, modular Fastify setup
+### D�tails d�architecture
+- **D�couplage** : routes ? contr�leurs ? services ? mod�les. Chaque couche est testable isol�ment.
+- **Persistence** : MongoDB stocke � la fois les embeddings (collection `documents`) et les logs de conversations (collection `conversations`).
+- **Interop�rabilit�** : l�ingestion depuis WordPress se fait via `/wordpress`, ind�pendante du chatbot `/chat`.
+- **S�curit� & Performance** : Fastify pour un routage rapide, pino pour la journalisation structur�e, seuils de similarit� configurables via `src/config/rag.config.js`.
 
+## Pipeline RAG (�tapes)
+1. **R�ception du contenu** : le backend re�oit postId, title, content, url, language via `/wordpress` (ou service interne).
+2. **D�coupage en chunks** : `textChunker` segmente le texte en blocs adapt�s au contexte LLM.
+3. **G�n�ration d�embeddings** : `embedding.service` appelle Ollama (`nomic-embed-text`) pour transformer chaque chunk en vecteur.
+4. **Stockage vectoriel** : les embeddings et m�tadonn�es sont ins�r�s dans MongoDB (`Document`).
+5. **Recherche par similarit�** : `vectorSearch.service` calcule la similarit� cosinus entre la question et les embeddings stock�s.
+6. **Filtrage par seuil** : seuls les documents avec un score = `SIMILARITY_THRESHOLD` sont retenus.
+7. **Construction du contexte** : `rag.service` assemble un bloc contextuel limit� � `MAX_CONTEXT_CHARS`.
+8. **Injection dans le prompt** : le contexte est inject� dans le prompt RAG pour le LLM Mistral.
+9. **Anti-hallucination** : si aucun document pertinent n�est trouv�, la r�ponse standard est : � I don't know based on the available information. �
 
-
-## Environment Variables
+## Structure du projet
 ```
-PORT=3000
-MONGO_URI=mongodb://localhost:27017/aiwebbot
-JWT_SECRET=your_jwt_secret
-OLLAMA_URL=http://localhost:11434
-RATE_LIMIT_MAX=10          # if configurable in plugin
-RATE_LIMIT_WINDOW=1 minute # if configurable in plugin
+src/
+  controllers/   # Logique HTTP (chat, wordpress, analytics, etc.)
+  services/      # RAG, embeddings, vector search, indexation, LLM
+  models/        # Sch�mas Mongoose (Document, Conversation)
+  routes/        # D�claration des routes Fastify
+  config/        # Configuration (env, RAG)
+  utils/         # Utilitaires (chunking, etc.)
+  middlewares/   # Gestion des erreurs, auth, etc.
+  plugins/       # Connexion Mongo, JWT, rate limiting
+scripts/         # Outils (tests RAG, etc.)
 ```
+- **controllers** : coordonnent validation, appels services et r�ponses HTTP.
+- **services** : contiennent le c�ur m�tier (RAG, embeddings, indexation).
+- **models** : d�finissent les sch�mas et index Mongo.
+- **routes** : exposent les endpoints Fastify en important les contr�leurs.
+- **config** : centralise la configuration (env, RAG).
+- **utils** : fonctions de support (chunking, helpers).
 
-## API Endpoints
+## Fonctionnalit�s principales
+- **POST /wordpress** : ingestion de contenu WordPress (validation Yup).
+- **R�indexation propre** : suppression des anciens chunks pour un m�me postId avant r�insertion.
+- **Embeddings via Ollama** : g�n�ration locale avec `nomic-embed-text`.
+- **Recherche vectorielle** : similarit� cosinus sur embeddings stock�s.
+- **Seuil de similarit� configurable** : centralis� dans `rag.config.js`.
+- **Anti-hallucination** : r�ponse neutre si contexte insuffisant.
+- **Journalisation des conversations** : question, r�ponse, postId associ�.
+- **GET /analytics** : statistiques d�usage en temps r�el.
+- **Configuration RAG centralis�e** : TOP_K, SIMILARITY_THRESHOLD, MAX_CONTEXT_CHARS.
 
-### POST /login
-- Body:
-```json
-{ "username": "admin", "password": "admin123" }
-```
-- Success 200:
-```json
-{ "success": true, "token": "<jwt>" }
-```
-- Failure 401:
-```json
-{ "success": false, "error": "Invalid credentials" }
-```
+## Mod�les de base de donn�es
+### Document (stockage vectoriel)
+- `postId`: String (identifiant logique du contenu WordPress)
+- `wordpressId`: String (index, non unique)
+- `title`: String
+- `content`: String (chunk)
+- `url`: String
+- `language`: String
+- `embedding`: [Number] (vecteur)
+- `chunkIndex`: Number (ordre des chunks)
+- Timestamps activ�s
 
-### POST /index  (Protected, JWT)
-- Headers: `Authorization: Bearer <jwt>`
-- Body:
-```json
-{
-  "wordpressId": 123,
-  "type": "post",
-  "title": "My Post",
-  "content": "Lorem ipsum dolor sit amet...",
-  "url": "https://example.com/post/123"
+### Conversation (analytics & logging)
+- `question`: String (requise)
+- `answer`: String (requise)
+- `postId`: String (meilleure correspondance, optionnel)
+- `createdAt`, `updatedAt`: automatiques via timestamps
+
+## Configuration RAG
+`src/config/rag.config.js` :
+```js
+const RAG_CONFIG = {
+  TOP_K: 3,
+  SIMILARITY_THRESHOLD: 0.6,
+  MAX_CONTEXT_CHARS: 2000
 }
+module.exports = { RAG_CONFIG }
 ```
-- Success 200/201:
+- **TOP_K** : nombre maximum de documents inject�s dans le contexte.
+- **SIMILARITY_THRESHOLD** : filtre les documents trop faibles pour r�duire le bruit.
+- **MAX_CONTEXT_CHARS** : taille maximale du contexte envoy� au LLM.
+Centraliser ces param�tres simplifie le tuning (pr�cision vs rappel) et �vite les valeurs en dur.
+
+## Syst�me d�analytics
+- **totalQuestions** : nombre total de conversations.
+- **questionsToday** : volume depuis le d�but de la journ�e (UTC).
+- **questionsByPost** : r�partition par `postId` (agr�gation Mongo).
+Ces m�triques aident � suivre l�engagement, l�efficacit� du contenu et � prioriser les am�liorations.
+
+## Installation & mise en route
+```bash
+# 1) Cloner le d�p�t
+git clone https://github.com/Hedyenee/aiwebbot_backend.git
+cd aiwebbot-backend
+
+# 2) Installer les d�pendances
+npm install
+
+# 3) Configurer l�environnement
+cp .env.example .env   # si disponible
+# Dans .env, d�finir au minimum :
+# PORT=3000
+# MONGO_URI=mongodb://...
+# OLLAMA_URL=http://localhost:11434
+# JWT_SECRET=...
+
+# 4) Lancer Ollama (avec le mod�le Mistral + nomic-embed-text)
+ollama run mistral
+ollama run nomic-embed-text
+
+# 5) D�marrer le serveur
+npm run dev
+# ou en production
+npm start
+```
+
+## Exemples d�API
+### POST /chat
+```bash
+curl -X POST http://localhost:3000/chat \
+  -H "Content-Type: application/json" \
+  -d '{ "question": "Quels services web proposez-vous ?" }'
+```
+R�ponse :
 ```json
 {
   "success": true,
-  "message": "Content indexed successfully",
-  "data": { "...Document fields..." }
-}
-```
-- Validation error 400:
-```json
-{
-  "success": false,
-  "error": "Validation failed",
-  "details": [
-    { "path": "url", "message": "url doit être valide" }
+  "answer": "...",
+  "sources": [
+    { "title": "...", "url": "...", "postId": "101", "score": 0.83 }
   ]
 }
 ```
-- Auth error 401:
-```json
-{ "success": false, "error": "Unauthorized" }
-```
 
-### POST /chat  (Public)
-- Body:
-```json
-{ "question": "Explain Moore's law." }
+### GET /analytics
+```bash
+curl http://localhost:3000/analytics
 ```
-- Success 200:
+R�ponse :
 ```json
 {
-  "success": true,
-  "answer": "…LLM response…"
-}
-```
-- Validation error 400:
-```json
-{
-  "success": false,
-  "error": "Validation failed",
-  "details": [
-    { "path": "question", "message": "question doit contenir au moins 3 caractères" }
+  "totalQuestions": 128,
+  "questionsToday": 12,
+  "questionsByPost": [
+    { "postId": "101", "count": 5 },
+    { "postId": "202", "count": 3 }
   ]
 }
 ```
-- Rate limit 429 (if exceeded):
+
+### POST /wordpress
+```bash
+curl -X POST http://localhost:3000/wordpress \
+  -H "Content-Type: application/json" \
+  -d '{
+    "postId": 101,
+    "title": "Services Web",
+    "content": "Nous concevons des sites rapides et SEO-friendly...",
+    "url": "https://example.com/web",
+    "language": "fr"
+  }'
+```
+R�ponse :
 ```json
-{ "statusCode": 429, "error": "Too Many Requests", "message": "Rate limit exceeded" }
+{
+  "message": "WordPress payload received",
+  "data": {
+    "postId": 101,
+    "title": "Services Web",
+    "url": "https://example.com/web",
+    "language": "fr"
+  }
+}
 ```
 
-## Security Features
-- JWT auth via `@fastify/jwt` on protected routes (/index)
-- Rate limiting via `@fastify/rate-limit`
-- Input validation with Yup (fail-fast 400 responses)
-- Centralized error handler
-- Request-scoped Pino logging (auth, validation, LLM timings)
+## D�cisions techniques
+- **Fastify** : serveur HTTP performant, faible overhead, �cosyst�me de plugins (rate-limit, CORS).
+- **MongoDB + Mongoose** : flexibilit� du sch�ma pour stocker embeddings et m�tadonn�es, agr�gations pour analytics.
+- **Similarit� cosinus** : mesure standard pour embeddings textuels, simple et efficace pour la recherche vectorielle.
+- **LLM local (Ollama)** : confidentialit�, latence r�duite, co�ts pr�visibles, possibilit� d�ex�cuter hors-ligne.
+- **Compromis pr�cision vs rappel** : seuil de similarit� configurable (0.6 par d�faut) pour limiter le bruit tout en conservant la couverture ; TOP_K=3 assure un contexte concis.
 
-## Database Models
-- **Document**: `wordpressId`, `type`, `title`, `content`, `url`, timestamps
-- **Conversation**: `question`, `answer`, `userId`, `responseTime`, timestamps
+## Am�liorations futures
+- **Automatisation WordPress compl�te** : plugin d�di� pour synchronisation bidirectionnelle.
+- **Dockerisation** : images pr�tes pour CI/CD et d�ploiement reproductible.
+- **Acc�l�ration GPU** : pour r�duire les temps d�inf�rence et de g�n�ration d�embeddings.
+- **Optimisation des performances** : cache des embeddings, compression des vecteurs, pagination des analytics.
+- **Seuil adaptatif** : ajustement dynamique du SIMILARITY_THRESHOLD selon la confiance et le domaine de la question.
 
-
-
+## Conclusion
+AIWebBot Backend propose une impl�mentation RAG structur�e, pr�te pour la production et adapt�e aux environnements o� la souverainet� des donn�es est critique. L�int�gration WordPress, la configuration centralis�e du RAG, la journalisation analytique et l�usage d�un LLM local en font une base solide pour d�velopper un chatbot fiable, maintenable et �volutif.

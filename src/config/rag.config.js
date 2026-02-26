@@ -1,0 +1,7 @@
+const RAG_CONFIG = {
+  TOP_K: 3,
+  SIMILARITY_THRESHOLD: 0.6,
+  MAX_CONTEXT_CHARS: 2000
+}
+
+module.exports = { RAG_CONFIG }

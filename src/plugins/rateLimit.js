@@ -1,10 +1,15 @@
-const rateLimit = require('@fastify/rate-limit')
+ï»¿const rateLimit = require('@fastify/rate-limit')
 
-// Plugin de limitation des requêtes avec log en cas de dépassement
+// Route-scoped rate limiting plugin (global disabled)
 async function rateLimitPlugin(fastify) {
   await fastify.register(rateLimit, {
-    max: 10,
-    timeWindow: '1 minute'
+    global: false, // enable per-route via config.rateLimit
+    max: 20,
+    timeWindow: '1 minute',
+    keyGenerator: (req) => req.ip,
+    errorResponseBuilder: () => ({
+      error: 'Too many requests. Please try again later.'
+    })
   })
 
   fastify.addHook('onError', async (request, reply, error) => {

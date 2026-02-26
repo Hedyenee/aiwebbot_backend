@@ -2,26 +2,28 @@ const mongoose = require('mongoose')
 
 const documentSchema = new mongoose.Schema(
   {
-    wordpressId: {
-      type: Number,
-      required: true,
-      unique: true
-    },
-    type: {
-      type: String, // post | page
-      required: true
-    },
-    title: {
+    postId: {
       type: String,
       required: true
     },
+    wordpressId: {
+      type: String,
+      index: true
+    },
+    title: String,
     content: {
       type: String,
       required: true
     },
-    url: {
-      type: String,
-      required: true
+    url: String,
+    language: String,
+    embedding: {
+      type: [Number],
+      index: true 
+    },
+    chunkIndex: {
+      type: Number,
+      default: 0
     }
   },
   { timestamps: true }
