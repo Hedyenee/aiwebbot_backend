@@ -1,7 +1,11 @@
 ﻿# AIWebBot Backend – Chatbot Intelligent basé sur RAG
 
 ## 1. Présentation générale
-AIWebBot Backend est une API Node.js/Fastify qui dote WordPress d’un chatbot intelligent capable de répondre avec contexte. Conçu dans le cadre d’un Projet de Fin d’Études (PFE), il met en œuvre un pipeline complet de Retrieval-Augmented Generation (RAG) prêt pour la production. Les contenus WordPress sont ingérés, vectorisés et interrogés via un LLM local (Ollama, modèle Mistral) afin de garantir souveraineté des données, faible latence, coûts maîtrisés et conformité.
+AIWebBot Backend est une API Node.js/Fastify qui implémente l’infrastructure nécessaire à l’intégration d’un chatbot intelligent avec WordPress. 
+Conçu dans le cadre d’un Projet de Fin d’Études (PFE), le projet met en œuvre un pipeline complet de Retrieval-Augmented Generation (RAG) prêt pour un déploiement en environnement de production.
+
+Le backend est capable de recevoir des contenus WordPress, de les vectoriser et de les interroger via un LLM local (Ollama, modèle Mistral). 
+Cette approche garantit la souveraineté des données, une latence réduite, des coûts maîtrisés et un meilleur contrôle de la confidentialité.
 
 ## 2. Architecture globale
 Flux fonctionnel : WordPress → Backend → Base vectorielle (MongoDB) → LLM → Réponse.
